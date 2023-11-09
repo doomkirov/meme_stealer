@@ -19,11 +19,10 @@ url_list = [
 ]
 
 
-def get_group_id(url):
+def get_group_id(url: str) -> int:
     r = requests.get(url=url, headers=headers)
     soup = BeautifulSoup(r.text, 'lxml')
     scripts = soup.find_all('meta', property="og:url")
-    print(list(scripts))
     address = list(str(scripts[0]).split('\"')[1].split('vk.com/')[-1])
     id = ''
     for symbol in address:
@@ -33,4 +32,4 @@ def get_group_id(url):
 
 
 if __name__ == '__main__':
-    print([get_group_id(url) for url in url_list])
+    print(get_group_id('https://vk.com/ru9gag'))

@@ -4,3 +4,4 @@ beautifulsoup4==4.12.2
 psycopg2_binary==2.9.7
 python-dotenv==1.0.0
 Requests==2.31.0
+pytube
