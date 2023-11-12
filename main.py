@@ -1,6 +1,5 @@
 import os
 import logging
-import time
 
 import asyncio
 from aiogram import Bot, Dispatcher
@@ -53,11 +52,18 @@ def attempt():
                 """
                 CREATE TABLE IF NOT EXISTS publics (
                     "group" bigint PRIMARY KEY NOT NULL,
-                    posts json,
-                    old_posts json,
+                    old_posts bigint[],
                     name text,
                     subscribers text[],
                     link text
+                );
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sended_videos (
+                    video_link text,
+                    telegram_file_id text
                 );
                 """
             )
@@ -76,7 +82,10 @@ def attempt():
 
                 await bot.delete_webhook(drop_pending_updates=True)
                 try:
-                    await dp.start_polling(bot, kwargs={'cursor': cursor, 'logging': logging})
+                    await dp.start_polling(
+                        bot,
+                        kwargs={'cursor': cursor, 'logging': logging}
+                    )
                 except Exception as ex:
                     logging.warning(
                         msg=f'dp.POLLING: Error! {ex}',

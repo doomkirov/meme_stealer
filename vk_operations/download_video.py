@@ -56,6 +56,7 @@ def get_youtube_url(vk_url: str) -> str:
     response = requests.get(vk_url, headers=headers)
     soup = bs(response.text, 'html.parser')
     youtube_link = soup.find('div', itemprop='video').find('link', itemprop='embedUrl').get('href')
+    print(youtube_link)
     return youtube_link
 
 

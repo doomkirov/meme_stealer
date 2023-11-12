@@ -68,7 +68,7 @@ def get_content(attachments: list, logging: logging, group_id: int) -> list[str]
                 if not os.path.exists(f'videos/{filename}.mp4'):
                     try:
                         get_video(video_url=link, filename=filename)
-                    except:
+                    except Exception:
                         try:
                             YouTube(
                                 get_youtube_url(link), use_oauth=True
@@ -76,11 +76,12 @@ def get_content(attachments: list, logging: logging, group_id: int) -> list[str]
                                     output_path='videos/',
                                     filename=f'{filename}.mp4'
                                 )
-                        except:
+                        except Exception as ex:
                             logging.error(
                                 msg='get_wall: Video download eror!'
                                     f'\nVideo link - {link}'
-                                    f' Group - {get_group_name(group_id)}',
+                                    f' Group - {get_group_name(group_id)}'
+                                    f'\n Error - {ex}',
                                 exc_info=False
                             )
                             return []
@@ -131,7 +132,7 @@ def get_content(attachments: list, logging: logging, group_id: int) -> list[str]
     return media_list
 
 
-def get_many_content(media: list[str], text: str) -> list[types.InputMediaPhoto, types.InputMediaVideo]:
+def get_many_content(media: list[str], text: str, cursor) -> list[types.InputMediaPhoto, types.InputMediaVideo]:
     media_list = []
     for index in range(0, len(media), 2):
         if media[index+1] == 'photo':
@@ -143,12 +144,29 @@ def get_many_content(media: list[str], text: str) -> list[types.InputMediaPhoto,
                 ))
             text = None
         else:
-            media_list.append(types.InputMediaVideo(
-                type='video',
-                media=types.FSInputFile(f'videos/{media[index]}'),
-                caption=text,
-                parse_mode='HTML'
-            ))
+            video_link = 'https://vk.com/video-' + media[index][:-4]
+            cursor.execute(
+                """
+                SELECT telegram_file_id
+                    FROM sended_videos
+                    WHERE video_link = %s
+                """, (video_link, )
+            )
+            telegram_file_id = cursor.fetchone()
+            if telegram_file_id:
+                media_list.append(types.InputMediaVideo(
+                    type='video',
+                    media=telegram_file_id[0],
+                    caption=text,
+                    parse_mode='HTML'
+                ))
+            else:
+                media_list.append(types.InputMediaVideo(
+                    type='video',
+                    media=types.FSInputFile(f'videos/{media[index]}'),
+                    caption=text,
+                    parse_mode='HTML'
+                ))
             text = None
     return media_list
 
@@ -171,7 +189,9 @@ def check_privacy(group_id: int) -> bool:
     return False
 
 
-def get_wall(group_id: int, logging: logging) -> dict:
+def get_wall(group_id: int, logging: logging, old_ids: list) -> dict:
+    if old_ids is None:
+        old_ids = []
     try:
         posts = requests.get(
             'https://api.vk.com/method/wall.get',
@@ -183,7 +203,7 @@ def get_wall(group_id: int, logging: logging) -> dict:
                 'extended': 'True'
             }
         ).json()
-    except Exception as ex:
+    except Exception:
         logging.error(
             msg='Не удалось выполнить request VK api!'
                 f' Группа: {group_id}',
@@ -194,24 +214,27 @@ def get_wall(group_id: int, logging: logging) -> dict:
     try:
         if posts['response']['items']:
             pass
-    except Exception as ex:
+    except Exception:
         logging.error(
             msg='VK api вернул неожиданный ответ!'
                 f' Ключи posts: {posts.keys()}'
                 f' Группа: {group_id}'
+                f'\nerror_msg: {posts["error"]["error_msg"]}'
         )
         return {}
+    new_old_ids = [sss['id'] for sss in posts['response']['items']]
 
-    # check if item is an ad
-    for index, item in enumerate(posts['response']['items']):
-        if item.get('marked_as_ads', 1) == 1:
+    index = 0
+    # check if item was already sent or is an ad
+    for _ in range(len(posts['response']['items'])):
+        if posts['response']['items'][index].get('marked_as_ads', 1) == 1:
             del posts['response']['items'][index]
+        elif posts['response']['items'][index].get('id') in old_ids:
+            del posts['response']['items'][index]
+        else:
+            index += 1
 
-    # with open('vk_response.json', 'w', encoding='utf-8') as file:
-    #     json.dump(obj=posts, fp=file, ensure_ascii=False, indent=4)
-    #     return
-
-
+    # print([x['id'] for x in posts['response']['items']])
     for post in posts['response']['items']:
         if 'copy_history' in post.keys():
             post = post['copy_history'][0]
@@ -222,7 +245,7 @@ def get_wall(group_id: int, logging: logging) -> dict:
         if (not new_posts[str(post['id'])]['media'] and
            not new_posts[str(post['id'])]['text']):
             del new_posts[str(post['id'])]
-    return new_posts
+    return [new_posts, new_old_ids]
 
 
 if __name__ == "__main__":
